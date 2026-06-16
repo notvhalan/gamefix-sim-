@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>GFX | RAIN-100 Exchange</title>
+<link rel="stylesheet" href="styles.css" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<!-- ── Header ──────────────────────────────────────────────────────────────── -->
+<header class="t-header">
+  <div class="t-logo">
+    <span class="t-logo-gfx">GFX</span>
+    <span class="t-logo-name">Global Rainfall Exchange</span>
+  </div>
+  <div class="t-header-pills">
+    <div class="t-pill"><span class="t-pill-label">DATE</span><span class="t-pill-value mono" id="hdr-date">—</span></div>
+    <div class="t-pill"><span class="t-pill-label">DAY</span><span class="t-pill-value mono" id="hdr-day">0</span></div>
+    <div class="t-pill" id="status-pill"><span class="t-pill-label">STATUS</span><span class="t-pill-value" id="hdr-status">PAUSED</span></div>
+    <div class="t-pill"><span class="t-pill-label">SEED</span><span class="t-pill-value mono" id="hdr-seed">—</span></div>
+    <div class="t-pill"><span class="t-pill-label">WEIGHT</span><span class="t-pill-value" id="hdr-weight">—</span></div>
+    <div class="t-pill"><span class="t-pill-label">CHECKS</span><span class="t-pill-value mono" id="hdr-checks">—</span></div>
+  </div>
+  <div class="t-header-controls">
+    <button class="t-btn t-btn-run" id="btn-start">▶ RUN</button>
+    <button class="t-btn" id="btn-pause">⏸ PAUSE</button>
+    <button class="t-btn" id="btn-step">+1D</button>
+    <button class="t-btn" id="btn-week">+7D</button>
+    <button class="t-btn" id="btn-month">+30D</button>
+    <button class="t-btn t-btn-danger" id="btn-reset">↺ RESET</button>
+  </div>
+</header>
+
+<!-- ── Market strip ─────────────────────────────────────────────────────────── -->
+<div class="t-market-strip">
+  <div class="t-strip-kpi"><span class="t-kpi-label">Implied D+1</span><span class="t-kpi-val" id="kpi-d1">—</span><span class="t-kpi-chg" id="kpi-d1-delta">—</span></div>
+  <div class="t-strip-kpi"><span class="t-kpi-label">Implied D+3</span><span class="t-kpi-val" id="kpi-d3">—</span><span class="t-kpi-chg" id="kpi-d3-delta">—</span></div>
+  <div class="t-strip-kpi"><span class="t-kpi-label">Implied D+7</span><span class="t-kpi-val" id="kpi-d7">—</span><span class="t-kpi-chg" id="kpi-d7-delta">—</span></div>
+  <div class="t-strip-sep"></div>
+  <div class="t-strip-kpi"><span class="t-kpi-label">Realised Index</span><span class="t-kpi-val" id="kpi-realised">—</span><span class="t-kpi-chg" id="kpi-realised-delta">—</span></div>
+  <div class="t-strip-kpi"><span class="t-kpi-label">Qual. Locations</span><span class="t-kpi-val" id="kpi-qualify">—</span><span class="t-kpi-chg" id="kpi-qualify-delta">—</span></div>
+  <div class="t-strip-sep"></div>
+  <div class="t-strip-kpi"><span class="t-kpi-label">Active Storms</span><span class="t-kpi-val" id="kpi-storms">0</span><span class="t-kpi-chg" id="kpi-storms-delta">—</span></div>
+  <div class="t-strip-kpi"><span class="t-kpi-label">Settled</span><span class="t-kpi-val" id="kpi-settled">—</span><span class="t-kpi-chg" id="kpi-settled-delta">—</span></div>
+  <div class="t-strip-sep"></div>
+  <div class="t-strip-kpi"><span class="t-kpi-label">Variation Margin</span><span class="t-kpi-val" id="kpi-vm">—</span><span class="t-kpi-chg" id="kpi-vm-delta">—</span></div>
+</div>
+
+<!-- ── Main grid ────────────────────────────────────────────────────────────── -->
+<div class="t-body">
+
+  <!-- LEFT: Order book + recent trades -->
+  <aside class="t-col t-col-left">
+    <div class="t-panel">
+      <div class="t-panel-head">
+        <span class="t-panel-title">Order Book</span>
+        <select id="ob-future-select" class="t-select t-select-sm"></select>
+      </div>
+      <div id="order-book-display" class="t-ob-wrap"></div>
+    </div>
+    <div class="t-panel t-panel-grow">
+      <div class="t-panel-head"><span class="t-panel-title">Recent Trades</span></div>
+      <div class="t-scroll">
+        <table class="t-table t-table-sm">
+          <thead><tr><th>PRICE</th><th>QTY</th><th>BUYER</th><th>SELLER</th></tr></thead>
+          <tbody id="trades-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </aside>
+
+  <!-- CENTER: Futures strip + chart tabs -->
+  <main class="t-col t-col-center">
+    <div id="futures-cards" class="t-futures-strip"></div>
+    <div class="t-chart-tabs">
+      <button class="t-chart-tab active" data-chart="ladder">D+1 … D+7 Ladder</button>
+      <button class="t-chart-tab" data-chart="history">Index History</button>
+      <button class="t-chart-tab" data-chart="map">Global Map</button>
+    </div>
+    <div class="t-chart-area">
+      <div class="t-chart-pane active" id="pane-ladder" style="position:relative;padding:0.5rem">
+        <canvas id="ladder-chart"></canvas>
+      </div>
+      <div class="t-chart-pane" id="pane-history">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:0.3rem 0.6rem;flex-shrink:0;border-bottom:1px solid var(--border)">
+          <div class="t-legend">
+            <span><span class="t-dot" style="background:#2b7de9"></span>Implied D1</span>
+            <span><span class="t-dot" style="background:#00c07a"></span>Realised</span>
+            <span><span class="t-dot" style="background:#e8a020"></span>Front Future</span>
+            <span><span class="t-dot" style="background:#a87de9"></span>Next Month</span>
+            <span><span class="t-dot" style="background:#3a5a78"></span>MA-7</span>
+          </div>
+          <select id="range-select" class="t-select t-select-sm">
+            <option value="30d">30D</option>
+            <option value="90d" selected>90D</option>
+            <option value="180d">180D</option>
+            <option value="all">ALL</option>
+          </select>
+        </div>
+        <div style="flex:1;position:relative;min-height:0;padding:0.4rem 0.5rem 0.3rem">
+          <canvas id="history-chart"></canvas>
+        </div>
+      </div>
+      <div class="t-chart-pane" id="pane-map">
+        <svg id="world-map" viewBox="0 0 900 450" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style="flex:1"></svg>
+        <div class="t-map-legend">
+          <span><span class="t-dot" style="background:#1e5fa0"></span>&lt;5%</span>
+          <span><span class="t-dot" style="background:#d97706"></span>5–20%</span>
+          <span><span class="t-dot" style="background:#dc2626"></span>&gt;20%</span>
+          <span><span class="t-dot" style="background:#00c07a"></span>YES</span>
+          <span><span class="t-dot" style="background:#1e2d3d"></span>NO</span>
+          <span style="margin-left:auto;color:var(--text-3)" id="map-storm-badge"></span>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- RIGHT: Order ticket + futures settlements -->
+  <aside class="t-col t-col-right">
+    <div class="t-panel">
+      <div class="t-panel-head"><span class="t-panel-title">Order Entry</span></div>
+      <div class="t-ticket">
+        <div class="t-side-row">
+          <button class="t-side-btn t-side-buy active" id="ot-side-buy">▲ BUY</button>
+          <button class="t-side-btn t-side-sell" id="ot-side-sell">▼ SELL</button>
+        </div>
+        <label class="t-field"><span>Contract</span><select id="ot-future" class="t-select"></select></label>
+        <label class="t-field"><span>Account</span>
+          <select id="ot-account" class="t-select">
+            <option value="acct-user">User Desk</option>
+            <option value="acct-alpha">Alpha Desk</option>
+            <option value="acct-beta">Beta Desk</option>
+            <option value="acct-gamma">Gamma Desk</option>
+          </select>
+        </label>
+        <div class="t-field-row">
+          <label class="t-field"><span>Quantity</span><input type="number" id="ot-qty" value="1" min="1" class="t-input mono" /></label>
+          <label class="t-field"><span>Type</span>
+            <select id="ot-type" class="t-select">
+              <option value="MARKET">Market</option>
+              <option value="LIMIT">Limit</option>
+            </select>
+          </label>
+        </div>
+        <label class="t-field" id="limit-price-field" style="display:none"><span>Limit Price</span><input type="number" id="ot-limit" step="0.01" class="t-input mono" placeholder="0.00" /></label>
+        <label class="t-field"><span>Time in Force</span>
+          <select id="ot-tif" class="t-select">
+            <option value="GTC">GTC – Good Till Cancel</option>
+            <option value="IOC">IOC – Immediate or Cancel</option>
+          </select>
+        </label>
+        <div class="t-margin-box" id="ot-margin-info">Select contract and quantity to see margin</div>
+        <button class="t-submit-btn t-submit-buy" id="btn-submit-order">SUBMIT BUY ORDER</button>
+        <div class="t-ticket-status" id="ot-status"></div>
+      </div>
+    </div>
+    <!-- Basis & Replication panel -->
+    <div class="t-panel" style="flex-shrink:0">
+      <div class="t-panel-head"><span class="t-panel-title">Basis &amp; Replication</span></div>
+      <div id="replication-body" style="padding:0.42rem 0.6rem;font-size:0.69rem;line-height:1.65"></div>
+    </div>
+
+    <div class="t-panel t-panel-grow" style="min-height:0;display:flex;flex-direction:column">
+      <div class="t-panel-head" style="display:flex;align-items:stretch;padding:0;gap:0">
+        <button class="t-rpanel-tab active" data-rpanel="rpanel-settle">Settlements</button>
+        <button class="t-rpanel-tab" data-rpanel="rpanel-binaries">Binary Pos</button>
+      </div>
+      <div id="rpanel-settle" style="flex:1;overflow-y:auto">
+        <table class="t-table t-table-sm">
+          <thead><tr><th>DATE</th><th>SYMBOL</th><th>PREV</th><th>NEW</th><th>MTD</th></tr></thead>
+          <tbody id="futures-settle-tbody"></tbody>
+        </table>
+      </div>
+      <div id="rpanel-binaries" style="display:none;flex:1;overflow-y:auto">
+        <table class="t-table t-table-sm">
+          <thead><tr><th>LOCATION</th><th>DATE</th><th>SIDE</th><th>QTY</th><th>ENTRY</th><th>CURR</th><th>P&amp;L</th></tr></thead>
+          <tbody id="loc-pos-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<!-- ── Bottom tabs ──────────────────────────────────────────────────────────── -->
+<div class="t-bottom">
+  <div class="t-tabs">
+    <button class="t-tab active" data-tab="positions">Positions</button>
+    <button class="t-tab" data-tab="accounts">Accounts</button>
+    <button class="t-tab" data-tab="contracts">Location Contracts</button>
+    <button class="t-tab" data-tab="settlement">Settlement</button>
+    <button class="t-tab" data-tab="checks">Verification</button>
+    <button class="t-tab" data-tab="storms">Storms &amp; Weights</button>
+    <button class="t-tab" data-tab="settings">Settings</button>
+    <button class="t-tab" data-tab="audit">Audit Log</button>
+  </div>
+  <div class="t-tab-body">
+
+    <!-- Positions -->
+    <div class="t-tab-pane active" id="tab-positions">
+      <table class="t-table">
+        <thead><tr>
+          <th>ACCOUNT</th><th>CONTRACT</th><th>NET QTY</th>
+          <th>AVG ENTRY</th><th>SETTLE</th>
+          <th>UNREALISED P&amp;L</th><th>REALISED P&amp;L</th>
+          <th>VM TODAY</th><th>MARGIN</th><th></th>
+        </tr></thead>
+        <tbody id="positions-tbody"></tbody>
+      </table>
+    </div>
+
+    <!-- Accounts -->
+    <div class="t-tab-pane" id="tab-accounts">
+      <table class="t-table">
+        <thead><tr><th>ACCOUNT</th><th>TYPE</th><th>CASH</th><th>MARGIN RESERVED</th><th>AVAILABLE</th><th>DAILY VM</th></tr></thead>
+        <tbody id="accounts-tbody"></tbody>
+      </table>
+    </div>
+
+    <!-- Contracts -->
+    <div class="t-tab-pane" id="tab-contracts" style="flex-direction:column;overflow:hidden">
+      <div style="display:flex;gap:0.4rem;padding:0.35rem 0.6rem;background:var(--s2);border-bottom:1px solid var(--border);flex-shrink:0">
+        <select id="location-filter" class="t-select t-select-sm"><option value="all">All</option><option value="yes">YES</option><option value="no">NO</option><option value="pending">Pending</option></select>
+        <select id="region-filter" class="t-select t-select-sm"><option value="all">All regions</option></select>
+      </div>
+      <div style="display:flex;flex:1;overflow:hidden;min-height:0">
+        <div style="flex:1;overflow-y:auto;min-width:0">
+          <table class="t-table t-table-sm">
+            <thead><tr><th>LOCATION</th><th>REGION</th><th>ZONE</th><th>D+1 PROB</th><th>YES PRICE</th><th>BID/ASK</th><th>RAIN mm</th><th>RESULT</th><th>TRADE D+1</th></tr></thead>
+            <tbody id="location-tbody"></tbody>
+          </table>
+        </div>
+        <!-- Strip detail panel — shown when a location row is clicked -->
+        <div id="loc-strip-panel" style="display:none;width:300px;flex-shrink:0;border-left:1px solid var(--border);background:var(--s2);overflow-y:auto;padding:0.5rem 0.6rem">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.4rem">
+            <span id="loc-strip-name" style="font-size:0.73rem;font-weight:700;color:var(--text-1)"></span>
+            <button id="loc-strip-close" class="t-act-btn" style="font-size:0.65rem;padding:1px 5px">✕</button>
+          </div>
+          <div id="loc-strip-body"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settlement -->
+    <div class="t-tab-pane" id="tab-settlement">
+      <div id="settlement-content" class="t-settlement-grid"></div>
+    </div>
+
+    <!-- Checks -->
+    <div class="t-tab-pane" id="tab-checks">
+      <div class="t-checks-wrap" id="checks-list"></div>
+    </div>
+
+    <!-- Storms & Weights -->
+    <div class="t-tab-pane" id="tab-storms">
+      <div style="padding:0.6rem;display:flex;flex-direction:column;gap:0.5rem">
+        <div style="font-size:0.65rem;color:var(--text-3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.1rem">Storm Injection</div>
+        <div class="t-storm-btns">
+          <button class="t-btn" data-storm="TROPICAL_CYCLONE">🌀 Tropical Cyclone</button>
+          <button class="t-btn" data-storm="MONSOON_SURGE">🌧 Monsoon Surge</button>
+          <button class="t-btn" data-storm="ATMOSPHERIC_RIVER">🌊 Atmospheric River</button>
+          <button class="t-btn" data-storm="CONVECTIVE_SYSTEM">⛈ Convective System</button>
+          <button class="t-btn" data-storm="EXTRATROPICAL_STORM">❄ Extratropical Storm</button>
+          <button class="t-btn t-btn-danger" id="btn-clear-storms">✕ Clear All</button>
+        </div>
+        <div style="font-size:0.65rem;color:var(--text-3);text-transform:uppercase;letter-spacing:0.08em;margin-top:0.25rem">Index Weighting</div>
+        <div class="t-storm-btns">
+          <button class="t-btn" data-weight="EQUAL_LOCATION">⊕ Equal Location</button>
+          <button class="t-btn" data-weight="AREA_WEIGHTED">🗺 Area Weighted</button>
+          <button class="t-btn" data-weight="POPULATION_WEIGHTED">👥 Population</button>
+          <button class="t-btn" data-weight="INSURED_EXPOSURE_WEIGHTED">🏢 Insured Exposure</button>
+        </div>
+        <div id="storm-list" style="display:flex;flex-direction:column;gap:0.3rem"></div>
+      </div>
+    </div>
+
+    <!-- Settings -->
+    <div class="t-tab-pane" id="tab-settings">
+      <div style="padding:0.6rem;overflow-y:auto">
+        <div class="t-settings-grid" id="settings-form">
+          <label class="t-field"><span>Start Date</span><input type="date" name="startDate" value="2027-01-01" class="t-input" /></label>
+          <label class="t-field"><span>Seed</span><input type="number" name="seed" value="4217" class="t-input mono" /></label>
+          <label class="t-field"><span>Location Count</span><input type="number" name="locationCount" value="1000" class="t-input mono" /></label>
+          <label class="t-field"><span>Speed</span><input type="number" name="speed" value="2" min="1" max="20" class="t-input mono" /></label>
+          <label class="t-field"><span>Threshold mm</span><input type="number" name="rainfallThresholdMm" value="100" class="t-input mono" /></label>
+          <label class="t-field"><span>Rain Multiplier</span><input type="number" name="globalRainfallMultiplier" value="1" step="0.05" class="t-input mono" /></label>
+          <label class="t-field"><span>Volatility</span><input type="number" name="rainfallVolatility" value="1" step="0.05" class="t-input mono" /></label>
+          <label class="t-field"><span>Seasonal Strength</span><input type="number" name="seasonalStrength" value="1" step="0.05" class="t-input mono" /></label>
+          <label class="t-field"><span>Tail Strength</span><input type="number" name="extremeEventTailStrength" value="1" step="0.05" class="t-input mono" /></label>
+          <label class="t-field"><span>Quote Spread</span><input type="number" name="quoteSpread" value="0.0018" step="0.0001" class="t-input mono" /></label>
+          <label class="t-field"><span>Desk Half-Spread</span><input type="number" name="simDeskHalfSpread" value="0.4" step="0.05" class="t-input mono" /></label>
+          <label class="t-field"><span>Margin Risk pts</span><input type="number" name="initialMarginRiskPoints" value="4.3" step="0.1" class="t-input mono" /></label>
+          <label class="t-field"><span>Storm Prob/Day</span><input type="number" name="stormFormationProbability" value="0.12" step="0.01" class="t-input mono" /></label>
+          <label class="t-field"><span>Storm Radius km</span><input type="number" name="stormRadiusKm" value="400" step="50" class="t-input mono" /></label>
+        </div>
+        <div style="margin-top:0.75rem;display:flex;gap:0.5rem;align-items:center">
+          <button class="t-btn t-btn-run" id="btn-apply-settings">Apply &amp; Reset</button>
+          <span style="color:var(--warn);font-size:0.75rem">⚠ Resets simulation to day 0</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Audit -->
+    <div class="t-tab-pane" id="tab-audit">
+      <div id="audit-list" style="overflow-y:auto;flex:1"></div>
+    </div>
+
+  </div><!-- /.t-tab-body -->
+</div><!-- /.t-bottom -->
+
+<script src="app.js"></script>
+</body>
+</html>

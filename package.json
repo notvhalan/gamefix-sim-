@@ -1,0 +1,13 @@
+{
+  "name": "gamefix-simulator",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Single-page GAMEFIX hazard index simulator dashboard",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.3",
+    "ws": "^8.18.0"
+  }
+}

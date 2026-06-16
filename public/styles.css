@@ -1,0 +1,662 @@
+/* ── Reset ─────────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+
+/* ── Design tokens ─────────────────────────────────────────────────────────── */
+:root {
+  color-scheme: dark;
+  --bg:         #020609;
+  --s1:         #060d15;
+  --s2:         #091220;
+  --s3:         #0d1a2d;
+  --s4:         #112035;
+  --border:     #152030;
+  --border-hi:  #1c3048;
+  --text:       #c8daea;
+  --text-2:     #7a9ab8;
+  --text-3:     #3a5a78;
+  --accent:     #1e7de9;
+  --accent-hi:  #4899ff;
+  --buy:        #00c07a;
+  --sell:       #e8354a;
+  --warn:       #e8a020;
+  --purple:     #7055c8;
+  --mono:       'Consolas', 'Courier New', monospace;
+}
+
+/* ── Body shell ─────────────────────────────────────────────────────────────── */
+body {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.4;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.mono { font-family: var(--mono); }
+
+/* ── Scrollbars ─────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar       { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--s1); }
+::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
+
+/* ── Header ─────────────────────────────────────────────────────────────────── */
+.t-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0 1rem;
+  height: 44px;
+  background: var(--s1);
+  border-bottom: 1px solid var(--border);
+}
+.t-logo {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+.t-logo-gfx {
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: var(--accent-hi);
+  font-family: var(--mono);
+}
+.t-logo-name {
+  font-size: 0.75rem;
+  color: var(--text-2);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.t-header-pills {
+  display: flex;
+  gap: 1px;
+  flex: 1;
+}
+.t-pill {
+  display: flex;
+  flex-direction: column;
+  padding: 0 0.75rem;
+  border-right: 1px solid var(--border);
+}
+.t-pill:first-child { border-left: 1px solid var(--border); }
+.t-pill-label {
+  font-size: 0.62rem;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+}
+.t-pill-value {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.t-pill-status-running .t-pill-value { color: var(--buy); }
+.t-pill-status-paused  .t-pill-value { color: var(--warn); }
+
+.t-header-controls {
+  display: flex;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+.t-btn {
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--border-hi);
+  background: var(--s3);
+  color: var(--text);
+  font-size: 0.78rem;
+  font-family: inherit;
+  border-radius: 4px;
+  cursor: pointer;
+  letter-spacing: 0.03em;
+  transition: border-color 0.15s, background 0.15s;
+}
+.t-btn:hover  { border-color: var(--accent); background: var(--s4); }
+.t-btn-run    { border-color: var(--buy); color: var(--buy); }
+.t-btn-run:hover { background: rgba(0,192,122,0.1); }
+.t-btn-danger { border-color: var(--sell); color: var(--sell); }
+.t-btn-danger:hover { background: rgba(232,53,74,0.1); }
+
+/* ── Market strip ────────────────────────────────────────────────────────────── */
+.t-market-strip {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  height: 48px;
+  background: var(--s2);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+.t-strip-kpi {
+  display: flex;
+  flex-direction: column;
+  padding: 0 1rem;
+  min-width: max-content;
+  border-right: 1px solid var(--border);
+}
+.t-strip-sep {
+  width: 1px;
+  height: 28px;
+  background: var(--border-hi);
+  margin: 0 0.25rem;
+}
+.t-kpi-label {
+  font-size: 0.6rem;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.t-kpi-val {
+  font-family: var(--mono);
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 0.03em;
+}
+.t-kpi-chg {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--text-3);
+}
+.t-kpi-chg.up   { color: var(--buy); }
+.t-kpi-chg.down { color: var(--sell); }
+
+/* ── Body grid ───────────────────────────────────────────────────────────────── */
+.t-body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 240px 1fr 268px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.t-col {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  border-right: 1px solid var(--border);
+}
+.t-col:last-child { border-right: none; }
+
+/* ── Panel ───────────────────────────────────────────────────────────────────── */
+.t-panel {
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid var(--border);
+  min-height: 0;
+}
+.t-panel-grow { flex: 1; min-height: 0; }
+.t-rpanel-tab {
+  flex: 1;
+  background: var(--s2);
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-right: 1px solid var(--border);
+  color: var(--text-3);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.38rem 0.5rem;
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s;
+}
+.t-rpanel-tab:last-child { border-right: none; }
+.t-rpanel-tab:hover { color: var(--text-2); }
+.t-rpanel-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  background: var(--s1);
+}
+.t-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.35rem 0.65rem;
+  background: var(--s2);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.t-panel-title {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+/* ── Scrollable areas ────────────────────────────────────────────────────────── */
+.t-scroll {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── Select & Input ──────────────────────────────────────────────────────────── */
+.t-select, .t-input {
+  background: var(--s3);
+  border: 1px solid var(--border-hi);
+  color: var(--text);
+  font-size: 0.78rem;
+  font-family: inherit;
+  border-radius: 3px;
+  padding: 0.25rem 0.4rem;
+  outline: none;
+}
+.t-select:focus, .t-input:focus { border-color: var(--accent); }
+.t-select-sm { font-size: 0.7rem; padding: 0.15rem 0.3rem; }
+
+/* ── Order book ──────────────────────────────────────────────────────────────── */
+.t-ob-wrap { flex-shrink: 0; }
+.t-ob-header {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  font-size: 0.62rem;
+  color: var(--text-3);
+  text-transform: uppercase;
+  padding: 0.25rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+  letter-spacing: 0.06em;
+}
+.t-ob-meta {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.7rem;
+  color: var(--text-2);
+  background: var(--s3);
+  border-bottom: 1px solid var(--border);
+}
+.t-ob-meta b { color: var(--text); font-family: var(--mono); }
+.t-ob-asks, .t-ob-bids { display: flex; flex-direction: column; }
+.t-ob-asks .t-ob-row { flex-direction: row-reverse; }
+.t-ob-row {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 0.18rem 0.5rem;
+  position: relative;
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  cursor: default;
+}
+.t-ob-row:hover { background: rgba(255,255,255,0.03); }
+.t-ob-depth-bar {
+  position: absolute;
+  top: 0; bottom: 0;
+  opacity: 0.12;
+  pointer-events: none;
+}
+.t-ob-asks .t-ob-depth-bar { right: 0; background: var(--sell); }
+.t-ob-bids .t-ob-depth-bar { left:  0; background: var(--buy); }
+.t-ob-price { font-weight: 700; min-width: 60px; }
+.t-ob-qty   { color: var(--text-2); min-width: 40px; text-align: right; }
+.t-ob-asks .t-ob-price { color: var(--sell); }
+.t-ob-bids .t-ob-price { color: var(--buy); }
+.t-ob-spread {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem;
+  font-size: 0.7rem;
+  color: var(--text-3);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: var(--s3);
+}
+.t-ob-spread b { color: var(--text); font-family: var(--mono); }
+.t-ob-last { color: var(--warn); font-family: var(--mono); font-weight: 700; }
+
+/* ── Futures strip ───────────────────────────────────────────────────────────── */
+.t-futures-strip {
+  flex-shrink: 0;
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  background: var(--s2);
+}
+.t-fut-card {
+  flex-shrink: 0;
+  padding: 0.45rem 0.8rem;
+  border-right: 1px solid var(--border);
+  cursor: pointer;
+  min-width: 140px;
+  transition: background 0.1s;
+}
+.t-fut-card:hover  { background: var(--s3); }
+.t-fut-card.active { background: var(--s4); border-bottom: 2px solid var(--accent); }
+.t-fut-symbol { font-size: 0.72rem; color: var(--accent-hi); font-family: var(--mono); font-weight: 700; letter-spacing: 0.05em; }
+.t-fut-settle { font-family: var(--mono); font-size: 1.05rem; font-weight: 700; color: var(--text); }
+.t-fut-delta  { font-family: var(--mono); font-size: 0.72rem; margin-left: 0.35rem; }
+.t-fut-delta.up   { color: var(--buy); }
+.t-fut-delta.down { color: var(--sell); }
+.t-fut-meta { font-size: 0.68rem; color: var(--text-3); margin-top: 0.15rem; display: flex; gap: 0.5rem; }
+.t-fut-meta b { color: var(--text-2); font-family: var(--mono); }
+.t-fut-status { font-size: 0.62rem; border-radius: 2px; padding: 0.05rem 0.3rem; font-weight: 700; display: inline-block; }
+.t-fut-status-ACTIVE   { background: rgba(0,192,122,0.15); color: var(--buy); }
+.t-fut-status-EXPIRING { background: rgba(232,160,32,0.15); color: var(--warn); }
+.t-fut-status-SETTLED  { background: rgba(112,85,200,0.15); color: var(--purple); }
+.t-fut-status-LISTED   { background: rgba(30,125,233,0.12); color: var(--accent); }
+
+/* ── Chart tabs ──────────────────────────────────────────────────────────────── */
+.t-chart-tabs {
+  flex-shrink: 0;
+  display: flex;
+  background: var(--s2);
+  border-bottom: 1px solid var(--border);
+}
+.t-chart-tab {
+  padding: 0.4rem 0.9rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+}
+.t-chart-tab:hover  { color: var(--text-2); }
+.t-chart-tab.active { color: var(--accent-hi); border-bottom-color: var(--accent); }
+
+.t-chart-area {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+}
+.t-chart-pane {
+  position: absolute;
+  inset: 0;
+  display: none;
+  flex-direction: column;
+}
+.t-chart-pane.active { display: flex; }
+.t-chart-pane svg { flex: 1; width: 100%; height: 100%; }
+
+.t-map-legend {
+  flex-shrink: 0;
+  display: flex;
+  gap: 1rem;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.7rem;
+  color: var(--text-2);
+  border-top: 1px solid var(--border);
+  background: var(--s2);
+}
+.t-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 0.3rem;
+  vertical-align: middle;
+}
+.t-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  font-size: 0.7rem;
+  color: var(--text-2);
+  padding: 0.3rem 0;
+}
+
+/* ── Order ticket ────────────────────────────────────────────────────────────── */
+.t-ticket { padding: 0.65rem; display: flex; flex-direction: column; gap: 0.55rem; }
+.t-side-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+  background: var(--bg);
+  border-radius: 4px;
+  padding: 3px;
+  border: 1px solid var(--border);
+}
+.t-side-btn {
+  padding: 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  font-family: inherit;
+  border-radius: 3px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  letter-spacing: 0.05em;
+  transition: all 0.1s;
+}
+.t-side-buy  { background: transparent; color: var(--text-3); border-color: transparent; }
+.t-side-sell { background: transparent; color: var(--text-3); border-color: transparent; }
+.t-side-buy.active  { background: rgba(0,192,122,0.18); color: var(--buy);  border-color: var(--buy); }
+.t-side-sell.active { background: rgba(232,53,74,0.18);  color: var(--sell); border-color: var(--sell); }
+
+.t-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.t-field > span {
+  font-size: 0.62rem;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+.t-field .t-select, .t-field .t-input { width: 100%; }
+.t-field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+
+.t-margin-box {
+  font-size: 0.75rem;
+  padding: 0.45rem 0.6rem;
+  background: var(--s3);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text-2);
+  line-height: 1.6;
+}
+.t-margin-box b { font-family: var(--mono); color: var(--text); }
+
+.t-submit-btn {
+  width: 100%;
+  padding: 0.6rem;
+  font-size: 0.85rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  border-radius: 3px;
+  border: 1px solid;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.1s;
+}
+.t-submit-buy  { background: rgba(0,192,122,0.15); border-color: var(--buy);  color: var(--buy); }
+.t-submit-buy:hover  { background: rgba(0,192,122,0.28); }
+.t-submit-sell { background: rgba(232,53,74,0.15);  border-color: var(--sell); color: var(--sell); }
+.t-submit-sell:hover { background: rgba(232,53,74,0.28); }
+
+.t-ticket-status {
+  font-size: 0.76rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 3px;
+  display: none;
+  text-align: center;
+}
+.t-ticket-status.ok  { background: rgba(0,192,122,0.12); color: var(--buy);  border: 1px solid rgba(0,192,122,0.3); }
+.t-ticket-status.err { background: rgba(232,53,74,0.12); color: var(--sell); border: 1px solid rgba(232,53,74,0.3); }
+
+/* ── Tables ──────────────────────────────────────────────────────────────────── */
+.t-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+.t-table th {
+  padding: 0.35rem 0.6rem;
+  text-align: left;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  border-bottom: 1px solid var(--border);
+  background: var(--s2);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.t-table td {
+  padding: 0.3rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  white-space: nowrap;
+}
+.t-table tr:hover td { background: rgba(255,255,255,0.02); }
+.t-table-sm td, .t-table-sm th { padding: 0.22rem 0.5rem; }
+.t-table .mono { font-family: var(--mono); }
+.t-table .buy-col  { color: var(--buy); }
+.t-table .sell-col { color: var(--sell); }
+.t-table .muted    { color: var(--text-2); }
+.t-table .warn     { color: var(--warn); }
+
+.t-act-btn {
+  padding: 0.18rem 0.5rem;
+  font-size: 0.7rem;
+  border: 1px solid var(--sell);
+  background: transparent;
+  color: var(--sell);
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.t-act-btn:hover { background: rgba(232,53,74,0.12); }
+
+/* ── Bottom tabs ─────────────────────────────────────────────────────────────── */
+.t-bottom {
+  flex-shrink: 0;
+  height: 240px;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border);
+  background: var(--s1);
+}
+.t-tabs {
+  flex-shrink: 0;
+  display: flex;
+  background: var(--s2);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+.t-tab {
+  padding: 0.4rem 0.85rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.t-tab:hover  { color: var(--text-2); background: var(--s3); }
+.t-tab.active { color: var(--accent-hi); border-bottom-color: var(--accent); background: var(--s1); }
+
+.t-tab-body { flex: 1; min-height: 0; position: relative; overflow: hidden; }
+.t-tab-pane {
+  position: absolute;
+  inset: 0;
+  display: none;
+  overflow-y: auto;
+}
+.t-tab-pane.active { display: flex; flex-direction: column; }
+
+/* ── Checks ──────────────────────────────────────────────────────────────────── */
+.t-checks-wrap {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 2px;
+  padding: 0.5rem;
+}
+.t-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.6rem;
+  border-radius: 3px;
+  font-size: 0.78rem;
+  border: 1px solid transparent;
+}
+.t-check-pass { background: rgba(0,192,122,0.06); border-color: rgba(0,192,122,0.15); color: var(--buy); }
+.t-check-fail { background: rgba(232,53,74,0.08); border-color: rgba(232,53,74,0.2);  color: var(--sell); }
+.t-check-icon { font-size: 0.9rem; font-weight: 900; width: 16px; text-align: center; flex-shrink: 0; }
+
+/* ── Settlement grid ─────────────────────────────────────────────────────────── */
+.t-settlement-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1px;
+  padding: 0.5rem;
+  background: var(--bg);
+}
+.t-settle-cell {
+  background: var(--s2);
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+}
+.t-settle-label { font-size: 0.62rem; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.07em; }
+.t-settle-value { font-family: var(--mono); font-size: 0.92rem; font-weight: 700; color: var(--text); margin-top: 0.1rem; }
+.t-settle-value.up   { color: var(--buy); }
+.t-settle-value.down { color: var(--sell); }
+
+/* ── Storm panel ─────────────────────────────────────────────────────────────── */
+.t-storm-btns { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.t-storm-item {
+  background: rgba(232,53,74,0.06);
+  border: 1px solid rgba(232,53,74,0.2);
+  padding: 0.3rem 0.6rem;
+  border-radius: 3px;
+  font-size: 0.76rem;
+  color: var(--text-2);
+}
+.t-storm-item b { color: var(--sell); }
+
+/* ── Settings ────────────────────────────────────────────────────────────────── */
+.t-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.6rem;
+}
+
+/* ── Audit ───────────────────────────────────────────────────────────────────── */
+.t-audit-item {
+  display: flex;
+  gap: 0.6rem;
+  align-items: baseline;
+  padding: 0.3rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.76rem;
+}
+.t-audit-date { color: var(--text-3); font-family: var(--mono); flex-shrink: 0; }
+.t-audit-type { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; padding: 0.08rem 0.3rem; border-radius: 2px; flex-shrink: 0; }
+.t-audit-day   { background: rgba(30,125,233,0.15); color: var(--accent); }
+.t-audit-storm { background: rgba(232,53,74,0.15); color: var(--sell); }
+.t-audit-trade { background: rgba(0,192,122,0.15); color: var(--buy); }
+.t-audit-roll  { background: rgba(112,85,200,0.15); color: var(--purple); }
+.t-audit-expiry{ background: rgba(232,160,32,0.15); color: var(--warn); }
+.t-audit-setup { background: rgba(255,255,255,0.07); color: var(--text-2); }
+.t-audit-msg { color: var(--text-2); }
+
+/* ── Scrollbar for bottom panes ──────────────────────────────────────────────── */
+.t-tab-pane table { width: 100%; }
+
+/* ── Row-yes/no highlighting ─────────────────────────────────────────────────── */
+.row-yes td { background: rgba(0,192,122,0.04); }
+.row-no  td { background: transparent; }
