@@ -6,6 +6,7 @@
 <title>GFX | RAIN-100 Exchange</title>
 <link rel="stylesheet" href="styles.css" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
 </head>
 <body>
 
@@ -80,7 +81,7 @@
       <button class="t-chart-tab" data-chart="map">Global Map</button>
     </div>
     <div class="t-chart-area">
-      <div class="t-chart-pane active" id="pane-ladder" style="position:relative;padding:0.5rem">
+      <div class="t-chart-pane active" id="pane-ladder" style="position:relative;padding:0.6rem 0.8rem 0.4rem">
         <canvas id="ladder-chart"></canvas>
       </div>
       <div class="t-chart-pane" id="pane-history">
@@ -213,7 +214,7 @@
     <!-- Accounts -->
     <div class="t-tab-pane" id="tab-accounts">
       <table class="t-table">
-        <thead><tr><th>ACCOUNT</th><th>TYPE</th><th>CASH</th><th>MARGIN RESERVED</th><th>AVAILABLE</th><th>DAILY VM</th></tr></thead>
+        <thead><tr><th>ACCOUNT</th><th>TYPE</th><th>CASH</th><th>MARGIN RESERVED</th><th>AVAILABLE</th><th>DAILY VM</th><th>PORTFOLIO P&amp;L</th></tr></thead>
         <tbody id="accounts-tbody"></tbody>
       </table>
     </div>

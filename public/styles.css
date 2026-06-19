@@ -255,17 +255,9 @@ body {
 .t-select-sm { font-size: 0.7rem; padding: 0.15rem 0.3rem; }
 
 /* ── Order book ──────────────────────────────────────────────────────────────── */
-.t-ob-wrap { flex-shrink: 0; }
-.t-ob-header {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  font-size: 0.62rem;
-  color: var(--text-3);
-  text-transform: uppercase;
-  padding: 0.25rem 0.5rem;
-  border-bottom: 1px solid var(--border);
-  letter-spacing: 0.06em;
-}
+.t-ob-wrap { flex-shrink: 0; padding: 0 0.35rem 0.35rem; }
+
+/* Meta bar: Last / Spread / FV */
 .t-ob-meta {
   display: flex;
   justify-content: space-between;
@@ -276,45 +268,79 @@ body {
   border-bottom: 1px solid var(--border);
 }
 .t-ob-meta b { color: var(--text); font-family: var(--mono); }
-.t-ob-asks, .t-ob-bids { display: flex; flex-direction: column; }
-.t-ob-asks .t-ob-row { flex-direction: row-reverse; }
-.t-ob-row {
+.t-ob-last { color: var(--warn); font-family: var(--mono); font-weight: 700; }
+
+/* Unified book box */
+.t-ob-book {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--s2);
+}
+
+/* Column header: BID QTY | sprd | ASK QTY */
+.t-ob-book-hdr {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  padding: 0.22rem 0.4rem;
+  font-size: 0.6rem;
+  font-family: var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: var(--s3);
+  border-bottom: 1px solid var(--border);
+}
+.t-ob-book-hdr span:last-child { text-align: right; }
+.t-ob-book-spread { color: var(--text-3); text-align: center; padding: 0 0.5rem; }
+
+/* Each row is a 3-column grid: bid-side | 1px divider | ask-side */
+.t-ob-split-row {
+  display: grid;
+  grid-template-columns: 1fr 1px 1fr;
+  font-family: var(--mono);
+  font-size: 0.79rem;
+}
+.t-ob-split-row:hover { background: rgba(255,255,255,0.025); }
+
+.t-ob-mid-div { background: var(--border); }
+
+/* Bid side: qty on far left, price flush to divider */
+.t-ob-bid-side {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 0;
-  padding: 0.18rem 0.5rem;
-  position: relative;
-  font-family: var(--mono);
-  font-size: 0.8rem;
-  cursor: default;
+  justify-content: space-between;
+  padding: 0.17rem 0.35rem;
+  overflow: hidden;
 }
-.t-ob-row:hover { background: rgba(255,255,255,0.03); }
-.t-ob-depth-bar {
+.t-ob-bid-bar {
   position: absolute;
-  top: 0; bottom: 0;
-  opacity: 0.12;
+  right: 0; top: 0; bottom: 0;
+  background: var(--buy);
+  opacity: 0.13;
   pointer-events: none;
 }
-.t-ob-asks .t-ob-depth-bar { right: 0; background: var(--sell); }
-.t-ob-bids .t-ob-depth-bar { left:  0; background: var(--buy); }
-.t-ob-price { font-weight: 700; min-width: 60px; }
-.t-ob-qty   { color: var(--text-2); min-width: 40px; text-align: right; }
-.t-ob-asks .t-ob-price { color: var(--sell); }
-.t-ob-bids .t-ob-price { color: var(--buy); }
-.t-ob-spread {
+.t-ob-qty-l  { color: var(--text-2); z-index: 1; }
+.t-ob-price-buy  { color: var(--buy); font-weight: 700; z-index: 1; }
+
+/* Ask side: price flush to divider, qty on far right */
+.t-ob-ask-side {
+  position: relative;
   display: flex;
-  justify-content: center;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.25rem;
-  font-size: 0.7rem;
-  color: var(--text-3);
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-  background: var(--s3);
+  justify-content: space-between;
+  padding: 0.17rem 0.35rem;
+  overflow: hidden;
 }
-.t-ob-spread b { color: var(--text); font-family: var(--mono); }
-.t-ob-last { color: var(--warn); font-family: var(--mono); font-weight: 700; }
+.t-ob-ask-bar {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  background: var(--sell);
+  opacity: 0.13;
+  pointer-events: none;
+}
+.t-ob-price-sell { color: var(--sell); font-weight: 700; z-index: 1; }
+.t-ob-qty-r  { color: var(--text-2); z-index: 1; }
 
 /* ── Futures strip ───────────────────────────────────────────────────────────── */
 .t-futures-strip {

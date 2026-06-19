@@ -50,6 +50,52 @@ let _historyChart = null;
 let _ladderYMax   = 0;   // ratcheting: only grows, reset on destroyCharts
 let _historyYMax  = 0;
 
+// ─── World map projection + coastline data ────────────────────────────────────
+
+const MAP_W = 900, MAP_H = 450;
+const projectLatLon = (lat, lon) => [(lon + 180) / 360 * MAP_W, (90 - lat) / 180 * MAP_H];
+
+let _landPathD = null; // built once from the world atlas, reused on every map render
+
+// Builds an SVG path string from a GeoJSON Polygon/MultiPolygon ring set, breaking the
+// path (instead of drawing a line) wherever a ring crosses the antimeridian, so e.g.
+// Russia/Alaska don't draw a seam line across the whole map.
+function ringsToPathD(coordsList) {
+  let d = '';
+  coordsList.forEach(ring => {
+    let prevX = null;
+    ring.forEach(([lon, lat], i) => {
+      const [x, y] = projectLatLon(lat, lon);
+      if (i === 0 || prevX == null || Math.abs(x - prevX) > MAP_W / 2) {
+        d += `M${x.toFixed(1)},${y.toFixed(1)}`;
+      } else {
+        d += `L${x.toFixed(1)},${y.toFixed(1)}`;
+      }
+      prevX = x;
+    });
+    d += 'Z';
+  });
+  return d;
+}
+
+(function loadWorldAtlas() {
+  fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/land-110m.json')
+    .then(r => r.json())
+    .then(topology => {
+      if (typeof topojson === 'undefined') return;
+      const fc = topojson.feature(topology, topology.objects.land);
+      let d = '';
+      fc.features.forEach(f => {
+        const geom = f.geometry;
+        if (geom.type === 'Polygon')       d += ringsToPathD(geom.coordinates);
+        else if (geom.type === 'MultiPolygon') geom.coordinates.forEach(poly => { d += ringsToPathD(poly); });
+      });
+      _landPathD = d;
+      if (state.current) renderWorldMap(state.current);
+    })
+    .catch(err => console.warn('World atlas failed to load, falling back to graticule-only map.', err));
+})();
+
 // Shared axis chrome — visible border + grid lines that look like a real chart
 const AXIS_X = {
   border: { display: true, color: '#1e3a5c', width: 1 },
@@ -172,38 +218,39 @@ function renderOrderBook(s) {
     <span>Sprd <b>${spread}</b></span>
     <span>FV <b>${fv}</b></span>
   </div>`;
-  html += `<div class="t-ob-header"><span style="color:var(--sell)">PRICE</span><span style="text-align:right">QTY</span></div>`;
+  const bids = book.bids || [];
+  const asks = book.asks || [];
+  const rowCount = Math.max(bids.length, asks.length, 1);
 
-  // Asks (reversed so lowest ask is nearest the spread)
-  html += `<div class="t-ob-asks">`;
-  const asksView = [...(book.asks || [])].reverse();
-  asksView.forEach(row => {
-    const pct = (row.quantity / maxQty * 100).toFixed(0);
-    html += `<div class="t-ob-row">
-      <div class="t-ob-depth-bar" style="width:${pct}%"></div>
-      <span class="t-ob-price">${fmt2(row.pricePoints)}</span>
-      <span class="t-ob-qty">${row.quantity}</span>
-    </div>`;
-  });
-  html += `</div>`;
-
-  html += `<div class="t-ob-spread">
-    <span style="color:var(--buy)">${fut.bidPricePoints != null ? fmt2(fut.bidPricePoints) : '—'}</span>
-    <span>·spread·</span>
-    <span style="color:var(--sell)">${fut.askPricePoints != null ? fmt2(fut.askPricePoints) : '—'}</span>
+  // Side-by-side book: bids on left | 1px divider | asks on right
+  html += `<div class="t-ob-book">`;
+  html += `<div class="t-ob-book-hdr">
+    <span style="color:var(--buy)">QTY&nbsp;&nbsp;BID</span>
+    <span class="t-ob-book-spread">sprd&nbsp;${spread}</span>
+    <span style="color:var(--sell)">ASK&nbsp;&nbsp;QTY</span>
   </div>`;
 
-  // Bids
-  html += `<div class="t-ob-bids">`;
-  (book.bids || []).forEach(row => {
-    const pct = (row.quantity / maxQty * 100).toFixed(0);
-    html += `<div class="t-ob-row">
-      <div class="t-ob-depth-bar" style="width:${pct}%"></div>
-      <span class="t-ob-price">${fmt2(row.pricePoints)}</span>
-      <span class="t-ob-qty">${row.quantity}</span>
+  for (let i = 0; i < rowCount; i++) {
+    const bid = bids[i];
+    const ask = asks[i];
+    const bidPct = bid ? (bid.quantity / maxQty * 100).toFixed(0) : 0;
+    const askPct = ask ? (ask.quantity / maxQty * 100).toFixed(0) : 0;
+    html += `<div class="t-ob-split-row">
+      <div class="t-ob-bid-side">
+        ${bid ? `<div class="t-ob-bid-bar" style="width:${bidPct}%"></div>
+        <span class="t-ob-qty-l">${bid.quantity}</span>
+        <span class="t-ob-price-buy">${fmt2(bid.pricePoints)}</span>` : ''}
+      </div>
+      <div class="t-ob-mid-div"></div>
+      <div class="t-ob-ask-side">
+        ${ask ? `<div class="t-ob-ask-bar" style="width:${askPct}%"></div>
+        <span class="t-ob-price-sell">${fmt2(ask.pricePoints)}</span>
+        <span class="t-ob-qty-r">${ask.quantity}</span>` : ''}
+      </div>
     </div>`;
-  });
-  html += `</div>`;
+  }
+
+  html += `</div>`; // .t-ob-book
 
   display.innerHTML = html;
 }
@@ -290,98 +337,107 @@ function renderLadderChart(s) {
   const labels = ['D+1','D+2','D+3','D+4','D+5','D+6','D+7'];
   const vals   = keys.map(k => s.ladder?.[k] ?? null);
   if (vals.every(v => v == null)) return;
-  const mktVals = keys.map(k => s.marketLadder?.[k] ?? null);
+  const mktVals    = keys.map(k => s.marketLadder?.[k]?.mid ?? null);
+  const mktBidVals = keys.map(k => s.marketLadder?.[k]?.bid ?? null);
+  const mktAskVals = keys.map(k => s.marketLadder?.[k]?.ask ?? null);
 
   const activeFut = s.tradableFutures?.find(f => f.status === 'ACTIVE');
-  const fvPts  = activeFut ? activeFut.currentSettlementPriceUnits / 100 : null;
+  const fvPts    = activeFut ? activeFut.currentSettlementPriceUnits / 100 : null;
   const realised = s.lastSettlement?.realisedIndex ?? null;
+  const hasStorm = (s.storms?.length ?? 0) > 0;
 
-  const datasets = [
-    {
-      label: 'Model',
-      data: vals,
-      borderColor: '#2b7de9',
-      backgroundColor: 'rgba(43,125,233,0.10)',
-      fill: true,
-      tension: 0.35,
-      pointRadius: 5,
-      pointHoverRadius: 7,
-      pointBackgroundColor: '#2b7de9',
-      pointBorderColor: '#020609',
-      pointBorderWidth: 2,
-      borderWidth: 2.5,
-      order: 2,
-    },
-    {
-      label: 'Market (book mid)',
-      data: mktVals,
-      borderColor: '#e8a020',
-      borderDash: [5, 3],
-      backgroundColor: 'transparent',
-      fill: false,
-      tension: 0.35,
-      pointRadius: 4,
-      pointHoverRadius: 6,
-      pointBackgroundColor: '#e8a020',
-      pointBorderColor: '#020609',
-      pointBorderWidth: 1.5,
-      borderWidth: 1.5,
-      order: 1,
-    },
-  ];
+  // Gradient fill for Model — built fresh each render (canvas size may have changed)
+  const ctx = canvas.getContext('2d');
+  const h   = canvas.offsetHeight || 220;
+  const modelGrad = ctx.createLinearGradient(0, 0, 0, h);
+  modelGrad.addColorStop(0,   'rgba(43,125,233,0.28)');
+  modelGrad.addColorStop(0.7, 'rgba(43,125,233,0.06)');
+  modelGrad.addColorStop(1,   'rgba(43,125,233,0)');
 
-  if (fvPts != null) datasets.push({
-    label: 'Futures fair value',
-    data: labels.map(() => fvPts),
-    borderColor: 'rgba(232,160,32,0.45)',
-    borderDash: [6, 4],
-    backgroundColor: 'transparent',
-    fill: false,
-    pointRadius: 0,
-    borderWidth: 1,
-    order: 3,
-  });
-
-  if (realised != null) datasets.push({
-    label: 'Realised (yesterday)',
-    data: labels.map(() => realised),
-    borderColor: 'rgba(0,192,122,0.55)',
-    backgroundColor: 'transparent',
-    fill: false,
-    pointRadius: 0,
-    borderWidth: 1.5,
-    order: 3,
-  });
-
-  // Basis line: Market − Model per day (secondary right axis)
   const basisVals = keys.map((k, i) => {
     const m = mktVals[i], v = vals[i];
     return (m != null && v != null) ? parseFloat((m - v).toFixed(3)) : null;
   });
-  datasets.push({
-    label: 'Mkt − Model',
-    data: basisVals,
-    yAxisID: 'basis',
-    borderColor: 'rgba(160,80,220,0.9)',
-    backgroundColor: 'rgba(160,80,220,0.07)',
-    fill: true,
-    tension: 0.3,
-    pointRadius: 4,
-    pointHoverRadius: 6,
-    pointBackgroundColor: 'rgba(160,80,220,0.9)',
-    pointBorderColor: '#020609',
-    pointBorderWidth: 1,
-    borderWidth: 1.5,
-    borderDash: [4, 3],
-    order: 0,
-  });
 
-  const hasStorm = (s.storms?.length ?? 0) > 0;
+  const datasets = [
+    // Strip bid/ask band — very subtle gold wash behind everything
+    { label: 'Strip ask', data: mktAskVals,
+      borderColor: 'transparent', backgroundColor: 'transparent',
+      fill: false, tension: 0.4, pointRadius: 0, borderWidth: 0,
+      order: -2, hideFromLegend: true },
+    { label: 'Strip spread', data: mktBidVals,
+      borderColor: 'transparent', backgroundColor: 'rgba(232,160,32,0.07)',
+      fill: '-1', tension: 0.4, pointRadius: 0, borderWidth: 0,
+      order: -2, hideFromLegend: true },
 
-  // Ratcheting y-axis: only grows, snaps to nice numbers → axis stays stable between ticks
-  const dataMax = Math.max(...vals.concat(mktVals).filter(v => v != null),
+    // Model — primary hero line with gradient fill
+    { label: 'Model',
+      data: vals,
+      borderColor: '#3d8ef0',
+      backgroundColor: modelGrad,
+      fill: true,
+      tension: 0.4,
+      pointRadius: 5,
+      pointHoverRadius: 8,
+      pointBackgroundColor: '#3d8ef0',
+      pointBorderColor: '#0a1628',
+      pointBorderWidth: 2,
+      borderWidth: 3,
+      order: 3 },
+
+    // Market mid — solid gold, no dashes, secondary to Model
+    { label: 'Market mid',
+      data: mktVals,
+      borderColor: '#e8a020',
+      backgroundColor: 'transparent',
+      fill: false,
+      tension: 0.4,
+      pointRadius: 3,
+      pointHoverRadius: 6,
+      pointBackgroundColor: '#e8a020',
+      pointBorderColor: '#0a1628',
+      pointBorderWidth: 1.5,
+      borderWidth: 1.8,
+      order: 2 },
+
+    // Basis — subtle purple, same axis, no secondary axis clutter
+    { label: 'Basis (Mkt−Mdl)',
+      data: basisVals,
+      yAxisID: 'basis',
+      borderColor: 'rgba(160,80,220,0.7)',
+      backgroundColor: 'rgba(160,80,220,0.06)',
+      fill: true,
+      tension: 0.4,
+      pointRadius: 2,
+      pointHoverRadius: 5,
+      pointBackgroundColor: 'rgba(160,80,220,0.8)',
+      pointBorderColor: 'transparent',
+      borderWidth: 1.2,
+      order: 1 },
+  ];
+
+  // Reference lines — flat, very thin, minimal visual weight
+  if (fvPts != null) datasets.push({
+    label: 'Futures settle',
+    data: labels.map(() => fvPts),
+    borderColor: 'rgba(232,160,32,0.35)',
+    borderDash: [4, 5],
+    backgroundColor: 'transparent',
+    fill: false, pointRadius: 0, borderWidth: 1, order: 0, hideFromLegend: true });
+
+  if (realised != null) datasets.push({
+    label: 'Realised',
+    data: labels.map(() => realised),
+    borderColor: 'rgba(0,192,122,0.4)',
+    borderDash: [3, 5],
+    backgroundColor: 'transparent',
+    fill: false, pointRadius: 0, borderWidth: 1, order: 0, hideFromLegend: true });
+
+  const dataMax = Math.max(...vals.concat(mktVals, mktAskVals).filter(v => v != null),
                             fvPts ?? 0, realised ?? 0);
-  _ladderYMax = Math.max(_ladderYMax, niceMax(dataMax * 1.15));
+  // Don't ratchet — recompute max fresh each render so the scale fits current data.
+  // min is always 0; max rounds up to a clean number with ~18% headroom.
+  _ladderYMax = niceMax(dataMax * 1.18);
   const yStep = niceStep(_ladderYMax);
 
   const opts = {
@@ -389,10 +445,13 @@ function renderLadderChart(s) {
     maintainAspectRatio: false,
     animation: false,
     interaction: { mode: 'index', intersect: false },
+    layout: { padding: { top: 10, right: 6, bottom: 2, left: 2 } },
     scales: {
       x: {
         ...AXIS_X,
-        ticks: { ...AXIS_X.ticks, font: { size: 11, family: 'Consolas, monospace' } },
+        grid: { ...AXIS_X.grid, display: false },
+        ticks: { ...AXIS_X.ticks, font: { size: 12, family: 'Consolas, monospace', weight: '600' } },
+        border: { ...AXIS_X.border, width: 1 },
       },
       y: {
         ...AXIS_Y,
@@ -402,35 +461,56 @@ function renderLadderChart(s) {
           ...AXIS_Y.ticks,
           font: { size: 10, family: 'Consolas, monospace' },
           stepSize: yStep,
+          count: 5,
           callback: v => Number.isInteger(v) ? v : v.toFixed(1),
         },
       },
       basis: {
         display: true,
         position: 'right',
-        border: { display: true, color: 'rgba(160,80,220,0.3)', dash: [3, 3], width: 1 },
+        border: { display: false },
         grid: { display: false },
         ticks: {
-          color: 'rgba(160,80,220,0.75)',
-          font: { size: 9, family: 'Consolas, monospace' },
-          padding: 4,
-          callback: v => (v >= 0 ? '+' : '') + v.toFixed(2),
+          color: 'rgba(160,80,220,0.5)',
+          font: { size: 8, family: 'Consolas, monospace' },
+          maxTicksLimit: 4,
+          padding: 2,
+          callback: v => (v >= 0 ? '+' : '') + v.toFixed(1),
         },
-        title: { display: true, text: 'MKT−MDL', color: 'rgba(160,80,220,0.65)', font: { size: 8 } },
       },
     },
     plugins: {
       legend: {
-        position: 'bottom',
-        labels: { color: '#4a6a88', boxWidth: 12, padding: 12, font: { size: 10 } },
+        position: 'top',
+        align: 'end',
+        labels: {
+          color: '#5a7a98',
+          boxWidth: 8,
+          boxHeight: 8,
+          borderRadius: 2,
+          useBorderRadius: true,
+          padding: 10,
+          font: { size: 10, family: 'Consolas, monospace' },
+          filter: (item, data) => !data.datasets[item.datasetIndex]?.hideFromLegend,
+        },
       },
       tooltip: {
-        backgroundColor: '#0d1a2e',
+        backgroundColor: 'rgba(9,18,34,0.95)',
         borderColor: '#1e3a5c',
         borderWidth: 1,
         titleColor: '#c8daea',
         bodyColor: '#7a9ac0',
-        callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y?.toFixed(3) ?? '—'}` },
+        padding: 10,
+        cornerRadius: 6,
+        filter: ctx => !ctx.dataset.hideFromLegend,
+        callbacks: {
+          title: items => items[0]?.label ?? '',
+          label: ctx => {
+            const v = ctx.parsed.y;
+            const unit = ctx.dataset.yAxisID === 'basis' ? ' pts basis' : ' pts';
+            return `  ${ctx.dataset.label}: ${v != null ? (v >= 0 && ctx.dataset.yAxisID === 'basis' ? '+' : '') + v.toFixed(2) : '—'}${unit}`;
+          },
+        },
       },
     },
   };
@@ -439,12 +519,13 @@ function renderLadderChart(s) {
     _ladderChart = new Chart(canvas, { type: 'line', data: { labels, datasets }, options: opts });
   } else {
     _ladderChart.data.datasets = datasets;
-    _ladderChart.options.scales.y.max      = _ladderYMax;
+    _ladderChart.options.scales.y.min            = 0;
+    _ladderChart.options.scales.y.max            = _ladderYMax;
     _ladderChart.options.scales.y.ticks.stepSize = yStep;
     _ladderChart.update('none');
   }
 
-  canvas.style.background = hasStorm ? 'rgba(232,53,74,0.03)' : '';
+  canvas.style.background = hasStorm ? 'rgba(232,53,74,0.04)' : '';
 }
 
 // ─── History chart (Chart.js) ─────────────────────────────────────────────────
@@ -583,10 +664,13 @@ function renderHistoryChart(s) {
 function renderWorldMap(s) {
   const svg = el('world-map');
   if (!svg) return;
-  const W = 900, H = 450;
-  const px = (lat, lon) => [(lon + 180) / 360 * W, (90 - lat) / 180 * H];
+  const W = MAP_W, H = MAP_H;
+  const px = projectLatLon;
 
   let out = `<rect width="${W}" height="${H}" fill="#020912"/>`;
+  if (_landPathD) {
+    out += `<path d="${_landPathD}" fill="#0f2436" stroke="#1e3a52" stroke-width="0.6" fill-rule="evenodd"/>`;
+  }
   // Graticules
   for (let lon = -180; lon <= 180; lon += 30) {
     const x = (lon + 180) / 360 * W;
@@ -705,16 +789,25 @@ function renderFuturesSettlements(s) {
 function renderAccounts(s) {
   const tbody = el('accounts-tbody');
   if (!tbody || !s.accounts) return;
-  tbody.innerHTML = s.accounts.map(a => {
+  const sorted = [...s.accounts].sort((a, b) => {
+    const pnlA = a.cash - (a.startingCash ?? a.cash);
+    const pnlB = b.cash - (b.startingCash ?? b.cash);
+    return pnlB - pnlA;
+  });
+  tbody.innerHTML = sorted.map((a, rank) => {
     const avail = a.cash - (a.reservedMargin || 0);
     const vm    = a.dailyVariationMargin || 0;
+    const pnl   = a.cash - (a.startingCash ?? a.cash);
+    const pnlClr = pnl > 0 ? 'var(--buy)' : pnl < 0 ? 'var(--sell)' : 'var(--text-2)';
+    const medal  = rank === 0 ? '🥇 ' : rank === 1 ? '🥈 ' : rank === 2 ? '🥉 ' : `${rank + 1}. `;
     return `<tr>
-      <td><b>${a.name}</b></td>
+      <td><b>${medal}${a.name}</b></td>
       <td class="muted">${a.traderType}</td>
       <td class="mono">${fmtPound(a.cash)}</td>
       <td class="mono">${fmtPound(a.reservedMargin || 0)}</td>
       <td class="mono" style="color:${colorOf(avail)}">${fmtPound(avail)}</td>
       <td class="mono" style="color:${colorOf(vm)}">${fmtPoundSign(vm)}</td>
+      <td class="mono" style="color:${pnlClr};font-weight:700">${fmtPoundSign(pnl)}</td>
     </tr>`;
   }).join('');
 }

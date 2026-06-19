@@ -47,7 +47,11 @@ const MULTIPLIER_PENCE = 1000; // £10 per index point = 1000p
 const PRICE_SCALE      = 100;  // internal price units per index point (21.45 pts = 2145 units)
 const PENCE_PER_UNIT   = MULTIPLIER_PENCE / PRICE_SCALE; // 10p per price unit
 const USER_ACCOUNT_ID  = 'acct-user';
-const SIM_DESK_IDS     = ['acct-alpha', 'acct-beta', 'acct-gamma'];
+const SIM_DESK_IDS     = [
+  'acct-alpha', 'acct-beta', 'acct-gamma', 'acct-delta', 'acct-epsilon',
+  'acct-zeta', 'acct-eta', 'acct-theta', 'acct-iota', 'acct-kappa',
+  'acct-lambda', 'acct-mu', 'acct-nu',
+];
 
 const DEFAULT_SETTINGS = {
   seed: 4217,
@@ -71,6 +75,7 @@ const DEFAULT_SETTINGS = {
   futuresMultiplier: 10,
   initialMarginRiskPoints: 4.3,
   simDeskHalfSpread: 0.4,  // base half-spread for simulated desk standing orders
+  simDeskViewSpread: 1.0,  // ±half-range of each desk's private FV estimate vs consensus — desks with divergent views cross each other
   weightingMethod: 'EQUAL_LOCATION',
   // Storm model
   stormFormationProbability: 0.12,
@@ -298,20 +303,38 @@ function buildContractSet(locations, obsDate, gf, rf, storms, threshold, setting
   return { contracts, impliedIndex: Math.round(10000 * wSum * 10) / 10 };
 }
 
-// Returns market-implied index for a single observation date using location book midpoints.
-// Falls back to contract yesPrice (physics) for any location without a live book.
-function computeMarketIndex(snap, obsDate) {
-  let sum = 0;
+// Returns market-implied index bid/ask/mid for a single observation date, built bottom-up
+// from each location contract's own book — basket bid = sum of weighted leg bids, basket
+// ask = sum of weighted leg asks (the price a strip arbitrageur would actually quote).
+// Falls back to contract bidPrice/askPrice/yesPrice (physics) for any location without a live book.
+function computeMarketIndexBidAsk(snap, obsDate) {
+  let bidSum = 0, askSum = 0, midSum = 0;
   snap.locations.forEach(loc => {
     const book = snap.locationOrderBooks[`${loc.id}-${obsDate}`];
     if (book) {
-      sum += loc.selectedWeight * (book.bid + book.ask) / 2;
+      bidSum += loc.selectedWeight * book.bid;
+      askSum += loc.selectedWeight * book.ask;
+      midSum += loc.selectedWeight * (book.bid + book.ask) / 2;
     } else {
       const c = snap.activeContracts.find(c => c.locationId === loc.id && c.observationDate === obsDate);
-      if (c) sum += loc.selectedWeight * c.yesPrice;
+      if (c) {
+        bidSum += loc.selectedWeight * c.bidPrice;
+        askSum += loc.selectedWeight * c.askPrice;
+        midSum += loc.selectedWeight * c.yesPrice;
+      }
     }
   });
-  return Math.round(sum * 10) / 10;
+  return {
+    bid: Math.round(bidSum * 10) / 10,
+    ask: Math.round(askSum * 10) / 10,
+    mid: Math.round(midSum * 10) / 10,
+  };
+}
+
+// Returns market-implied index (mid only) for a single observation date. Used wherever a
+// single fair-value number is needed (e.g. projectedSettlement).
+function computeMarketIndex(snap, obsDate) {
+  return computeMarketIndexBidAsk(snap, obsDate).mid;
 }
 
 // Initialise or drift location order books after a daily physics rebuild.
@@ -472,9 +495,14 @@ function updatePositionOnTrade(snap, accountId, futureId, side, qty, tradePriceU
     const totalCost = Math.abs(prevQty) * pos.averageEntryPriceUnits + qty * tradePriceUnits;
     pos.averageEntryPriceUnits = Math.abs(newQty) > 0 ? Math.round(totalCost / Math.abs(newQty)) : tradePriceUnits;
   } else {
-    // Reducing or crossing through zero
+    // Reducing or crossing through zero.
+    // Use previousSettlementPriceUnits (yesterday's VM mark) as the baseline so this close P&L
+    // only captures the intraday move from last night's settle to the closing trade price.
+    // That amount is equal and opposite for both counterparties → zero-sum.
+    // Using averageEntryPriceUnits instead would double-count already-received VM and create
+    // non-zero-sum cash whenever the two sides entered at different prices.
     const closedQty = Math.min(Math.abs(prevQty), qty);
-    const pnlPence  = closedQty * (tradePriceUnits - pos.averageEntryPriceUnits) * Math.sign(prevQty) * PENCE_PER_UNIT;
+    const pnlPence  = closedQty * (tradePriceUnits - pos.previousSettlementPriceUnits) * Math.sign(prevQty) * PENCE_PER_UNIT;
     pos.realisedTradingPnlPence += pnlPence;
     // Release proportional margin
     const releaseProportion = closedQty / Math.abs(prevQty);
@@ -688,10 +716,12 @@ function settleFinalExpiry(snap, fut, realisedIndex) {
   snap.positions.forEach(pos => {
     if (pos.futureId !== fut.id || pos.status !== 'OPEN') return;
     pos.status = 'SETTLED';
-    // Release margin
+    // Release margin reservation — only reduces the reservedMargin tracking field.
+    // Cash is NOT credited here because margin was never deducted from cash when the
+    // position opened (reservedMargin and cash are separate fields; crediting cash here
+    // would create money from nothing on every expiry).
     const account = snap.accounts.find(a => a.id === pos.accountId);
     if (account) {
-      account.cash += pos.initialMarginReservedPence / 100;
       account.reservedMargin -= pos.initialMarginReservedPence / 100;
     }
     pos.initialMarginReservedPence = 0;
@@ -745,13 +775,25 @@ function createInitialState(overrides = {}) {
 
   const tradableFutures = createInitialTradableFutures(startDate, ladder);
 
-  // Accounts: Alpha, Beta, Gamma (simulated), User (interactive)
+  // Accounts: all start with equal cash so portfolio P&L is comparable
+  const START_CASH = 500000;
   const baseAcct = { reservedMargin: 0, realisedPnl: 0, unrealisedPnl: 0, dailyVariationMargin: 0, cashDelta: 0 };
+  const mkAcct = (id, name, traderType) => ({ ...baseAcct, id, name, traderType, cash: START_CASH, startingCash: START_CASH });
   const accounts = [
-    { ...baseAcct, id: 'acct-alpha', name: 'Alpha Desk', traderType: 'Directional',    cash: 500000 },
-    { ...baseAcct, id: 'acct-beta',  name: 'Beta Desk',  traderType: 'Relative Value',  cash: 450000 },
-    { ...baseAcct, id: 'acct-gamma', name: 'Gamma Desk', traderType: 'Risk Arbitrage',  cash: 600000 },
-    { ...baseAcct, id: USER_ACCOUNT_ID, name: 'User Desk', traderType: 'User',          cash: 100000 },
+    mkAcct('acct-alpha',   'Alpha Desk',   'Directional'),
+    mkAcct('acct-beta',    'Beta Desk',    'Relative Value'),
+    mkAcct('acct-gamma',   'Gamma Desk',   'Risk Arbitrage'),
+    mkAcct('acct-delta',   'Delta Desk',   'Macro'),
+    mkAcct('acct-epsilon', 'Epsilon Desk', 'Vol Arb'),
+    mkAcct('acct-zeta',    'Zeta Desk',    'Carry'),
+    mkAcct('acct-eta',     'Eta Desk',     'Momentum'),
+    mkAcct('acct-theta',   'Theta Desk',   'Mean Reversion'),
+    mkAcct('acct-iota',    'Iota Desk',    'Basis Trader'),
+    mkAcct('acct-kappa',   'Kappa Desk',   'Index Arb'),
+    mkAcct('acct-lambda',  'Lambda Desk',  'Systematic'),
+    mkAcct('acct-mu',      'Mu Desk',      'Discretionary'),
+    mkAcct('acct-nu',      'Nu Desk',      'Hedge Desk'),
+    mkAcct(USER_ACCOUNT_ID, 'User Desk',   'User'),
   ];
 
   // Seed initial positions for simulated accounts (balanced so VM nets to zero)
@@ -903,12 +945,17 @@ function advanceSimulationDay(snap, days) {
       }
     });
 
-    // Realised daily index
+    // Realised daily index — read off each settling contract's book midpoint (bid/ask),
+    // not recomputed fresh from physics. Individual location payouts below still pay on
+    // measured rainfall; this is only the headline/futures-feeding index value, and it means
+    // a book that hasn't converged to the true outcome by lock can skew the realised print.
     let realisedWSum = 0;
     snap.locations.forEach(loc => {
-      realisedWSum += loc.selectedWeight * ((rainfallMap[loc.id] ?? 0) > threshold ? 1 : 0);
+      const book = snap.locationOrderBooks[`${loc.id}-${date}`];
+      const mid  = book ? (book.bid + book.ask) / 2 : ((rainfallMap[loc.id] ?? 0) > threshold ? 10000 : 0);
+      realisedWSum += loc.selectedWeight * mid;
     });
-    const realisedIndex = Math.round(10000 * realisedWSum * 10) / 10;
+    const realisedIndex = Math.round(realisedWSum * 10) / 10;
 
     // Rebuild D+1..D+7 ladder
     const prevLadder = { ...snap.ladder };
@@ -944,11 +991,11 @@ function advanceSimulationDay(snap, days) {
       return false; // remove from open positions
     });
 
-    // Market-implied index for D+1..D+7: uses location book midpoints
+    // Market-implied index for D+1..D+7: bid/ask/mid built bottom-up from location books
     const marketLadder = {};
     for (let d = 1; d <= 7; d++) {
       const obsDate = addDays(date, d);
-      marketLadder[`d${d}`] = computeMarketIndex(snap, obsDate);
+      marketLadder[`d${d}`] = computeMarketIndexBidAsk(snap, obsDate);
     }
     snap.marketLadder = marketLadder;
 
@@ -1013,24 +1060,29 @@ function advanceSimulationDay(snap, days) {
       }
     });
 
-    // ─ Simulated desk standing orders (Alpha / Beta / Gamma post two-sided limit orders) ─
-    const simRng = seededRandom(daySeed + 555001);
-    snap.tradableFutures.forEach(fut => {
+    // ─ Simulated desk standing orders ─
+    // Each desk has an independent per-day private view (signal) that shifts the FV it quotes
+    // around. Desks with opposing views (one bullish, one bearish) will cross each other and
+    // trade, so all 13 desks build positions — not just the three with seeded initial lots.
+    snap.tradableFutures.forEach((fut, fi) => {
       if (fut.status !== 'ACTIVE' && fut.status !== 'EXPIRING') return;
       if (!snap.orderBook[fut.id]) snap.orderBook[fut.id] = emptyBook();
-      // Cancel previous standing orders from simulated desks and refresh
       cancelSimDeskOrders(snap.orderBook[fut.id]);
       fut.tradeHistory = fut.tradeHistory.filter(t => t.time === date);
 
       const book = snap.orderBook[fut.id];
       const fv   = fut.projectedSettlement;
 
-      SIM_DESK_IDS.forEach(accId => {
-        const halfSpread = settings.simDeskHalfSpread * (0.6 + simRng() * 0.8);
-        const skew       = (simRng() - 0.5) * 0.2;   // slight directional lean
-        const bidPts     = Math.max(0.1, Math.round((fv - halfSpread + skew) * 100) / 100);
-        const askPts     = Math.max(bidPts + 0.05, Math.round((fv + halfSpread + skew) * 100) / 100);
-        const qty        = 1 + Math.round(simRng() * 9);
+      SIM_DESK_IDS.forEach((accId, di) => {
+        // Independent seed per desk per future per day — no shared RNG state
+        const deskRng    = seededRandom(daySeed + fi * 1000003 + di * 7919 + 555001);
+        const signal     = (deskRng() - 0.5) * settings.simDeskViewSpread; // private FV view
+        const viewFv     = fv + signal;
+        const halfSpread = settings.simDeskHalfSpread * (0.6 + deskRng() * 0.8);
+        const skew       = (deskRng() - 0.5) * 0.1;
+        const bidPts     = Math.max(0.1, Math.round((viewFv - halfSpread + skew) * 100) / 100);
+        const askPts     = Math.max(bidPts + 0.05, Math.round((viewFv + halfSpread + skew) * 100) / 100);
+        const qty        = 1 + Math.round(deskRng() * 9);
 
         const mkOrder = (side, px) => ({
           id: nextOrderId(), accountId: accId, futureId: fut.id,
@@ -1059,11 +1111,12 @@ function advanceSimulationDay(snap, days) {
       if (fut.status !== 'ACTIVE' && fut.status !== 'EXPIRING') return;
       const settle = calcOfficialSettlement(fut, date);
       const prevUnits = fut.currentSettlementPriceUnits;
+      // VM must be applied before updating currentSettlementPriceUnits — the function
+      // uses it as the baseline to compute deltaUnits, so updating first gives delta = 0.
+      const vmResult = applyFuturesVariationMargin(snap, fut, settle.priceUnits);
       fut.previousSettlementPriceUnits = prevUnits;
       fut.currentSettlementPriceUnits  = settle.priceUnits;
       fut.dailySettlementMethod = settle.method;
-
-      const vmResult = applyFuturesVariationMargin(snap, fut, settle.priceUnits);
       totalFutVM += vmResult ? vmResult.totalCreditsPence : 0;
 
       snap.futuresSettlements.unshift({
